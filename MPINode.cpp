@@ -1,6 +1,8 @@
+﻿#include <assert.h>
+#include <string>
+
 #include "MPINode.h"
 #include "mpi.h"
-#include <assert.h>
 
 NeighborDirection opposite(NeighborDirection d)
 {
@@ -154,7 +156,30 @@ std::vector<double> MPINode::ConjugateGradient()
 	return omega;
 }
 
-void MPINode::BuildNeighborInfo(int world_rank, int X_segments, int Y_segments, int localNx, int localNy)
+void  MPINode::CreateDomainInfo(const Domain& InitialDomain, int M, int N)
+{
+	int world_rank, world_size;
+	int X_segments, Y_segments;
+	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+	std::vector<Domain> Domains = domain::SplitDomain2D(world_size, InitialDomain);
+
+	if (Domains.size() != world_size)
+	{
+		assert(false);
+		MPI_Finalize();
+		return;
+	}
+
+	m_Subdomain = Domains[world_rank];
+
+	domain::FindOptimalPartitionRC(world_size, M, N, X_segments, Y_segments);
+
+	BuildNeighborInfo(world_rank, X_segments, Y_segments);
+}
+
+void MPINode::BuildNeighborInfo(int world_rank, int X_segments, int Y_segments)
 {
 	m_vNeighbors.clear();
 	m_vNeighbors.reserve(4);
@@ -162,81 +187,195 @@ void MPINode::BuildNeighborInfo(int world_rank, int X_segments, int Y_segments, 
 	// Compute 2D grid coordinates of this rank
 	int ix = world_rank % X_segments;
 	int iy = world_rank / X_segments;
+	int Nx_local = m_Subdomain.Nx_local;
+	int Ny_local = m_Subdomain.Ny_local;
+	int Nx_total = m_Subdomain.Nx_total;
+	int Ny_total = m_Subdomain.Ny_total;
 
 	auto addNeighbor = [&](int nx, int ny, NeighborDirection dir)
 	{
 		// Out of bounds = no neighbor
 		if (nx < 0 || nx >= X_segments || ny < 0 || ny >= Y_segments)
+		{
+			m_aHasNeighbour[(int)dir] = false;
 			return;
+		}
 
 		NeighborInfo nb;
 		nb.NeighborRank = ny * X_segments + nx;
 		nb.direction = dir;
-
-		// LEFT / RIGHT exchange vertical strips
-		if (dir == NeighborDirection::LEFT)
+		
+		switch (dir)
 		{
-			nb.sendIdx.reserve(localNy);
-			nb.recvIdx.reserve(localNy);
-
-			for (int y = 0; y < localNy; y++)
-				nb.sendIdx.push_back(y * localNx + 0);
-			nb.recvIdx = nb.sendIdx;
-			/*for (int y = 0; y < localNy; y++)
-				nb.recvIdx.push_back(y * localNx + (localNx - 1));*/
-		}
-		else if (dir == NeighborDirection::RIGHT)
+		case NeighborDirection::LEFT:
 		{
-			nb.sendIdx.reserve(localNy);
-			nb.recvIdx.reserve(localNy);
+			nb.sendIdx.reserve(Ny_local);
+			nb.recvIdx.reserve(Ny_local);
 
-			for (int y = 0; y < localNy; y++)
-				nb.sendIdx.push_back(y * localNx + (localNx - 1));
-			nb.recvIdx = nb.sendIdx;
-			/*for (int y = 0; y < localNy; y++)
-				nb.recvIdx.push_back(y * localNx + 0);*/
+			int y_begin = (iy == Y_segments - 1) ? 0 : 1;
+			int y_end = y_begin + Ny_local;
+			for (int y = y_begin; y < y_end; y++)
+			{
+				nb.sendIdx.push_back(y * Nx_total + 1);
+				nb.recvIdx.push_back(y * Nx_total);
+			}
 		}
-
-		// UP / DOWN exchange horizontal strips
-		else if (dir == NeighborDirection::UP)
+			break;
+		case NeighborDirection::RIGHT:
 		{
-			nb.sendIdx.reserve(localNx);
-			nb.recvIdx.reserve(localNx);
+			nb.sendIdx.reserve(Ny_local);
+			nb.recvIdx.reserve(Ny_local);
 
-			int y = 0;
-			for (int x = 0; x < localNx; x++)
-				nb.sendIdx.push_back(y * localNx + x);
-
-			nb.recvIdx = nb.sendIdx;
-			/*int gy = localNy - 1;
-			for (int x = 0; x < localNx; x++)
-				nb.recvIdx.push_back(gy * localNx + x);*/
+			int y_begin = (iy == Y_segments - 1) ? 0 : 1;
+			int y_end = y_begin + Ny_local;
+			for (int y = y_begin; y < y_end; y++)
+			{
+				nb.sendIdx.push_back((y + 1) * Nx_total - 2);
+				nb.recvIdx.push_back((y + 1) * Nx_total - 1);
+			}
 		}
-		else if (dir == NeighborDirection::DOWN)
+			break;
+		case NeighborDirection::UP:
 		{
-			nb.sendIdx.reserve(localNx);
-			nb.recvIdx.reserve(localNx);
+			nb.sendIdx.reserve(Nx_local);
+			nb.recvIdx.reserve(Nx_local);
 
-			int y = localNy - 1;
-			for (int x = 0; x < localNx; x++)
-				nb.sendIdx.push_back(y * localNx + x);
+			int x_begin = ix == 0 ? 0 : 1;
+			int x_end = x_begin + Nx_local;
+			for (int x = x_begin; x < x_end; x++)
+			{
+				nb.sendIdx.push_back(x + Nx_total);
+				nb.recvIdx.push_back(x);
+			}
+		}
+			break;
+		case NeighborDirection::DOWN:
+		{
+			nb.sendIdx.reserve(Nx_local);
+			nb.recvIdx.reserve(Nx_local);
 
-			nb.recvIdx = nb.sendIdx;
-			/*int gy = 0;
-			for (int x = 0; x < localNx; x++)
-				nb.recvIdx.push_back(gy * localNx + x);*/
+			int x_begin = ix == 0 ? 0 : 1;
+			int x_end = x_begin + Nx_local;
+			for (int x = x_begin; x < x_end; x++)
+			{
+				nb.sendIdx.push_back(Nx_total * (Ny_total - 2) + x);
+				nb.recvIdx.push_back(Nx_total * (Ny_total - 1) + x);
+			}
+		}
+			break;
 		}
 
+		m_aHasNeighbour[(int)dir] = true;
 		m_vNeighbors.push_back(nb);
 	};
 
 	// Add 4 possible neighbors
-	/*addNeighbor(ix - 1, iy, NeighborDirection::LEFT);
+	addNeighbor(ix - 1, iy, NeighborDirection::LEFT);
 	addNeighbor(ix + 1, iy, NeighborDirection::RIGHT);
-	addNeighbor(ix, iy - 1, NeighborDirection::UP);
-	addNeighbor(ix, iy + 1, NeighborDirection::DOWN);*/
-	addNeighbor(ix, iy - 1, NeighborDirection::LEFT);
-	addNeighbor(ix, iy + 1, NeighborDirection::RIGHT);
-	addNeighbor(ix - 1, iy, NeighborDirection::UP);
-	addNeighbor(ix + 1, iy, NeighborDirection::DOWN);
+	addNeighbor(ix, iy + 1, NeighborDirection::UP);
+	addNeighbor(ix, iy - 1, NeighborDirection::DOWN);
+}
+
+int MPINode::GetHorizontalNeighboursCount()
+{
+	int count = 0;
+	count += m_aHasNeighbour[(int)NeighborDirection::LEFT] ? 1 : 0;
+	count += m_aHasNeighbour[(int)NeighborDirection::RIGHT] ? 1 : 0;
+	return count;
+}
+
+int MPINode::GetVertialNeighboursCount()
+{
+	int count = 0;
+	count += m_aHasNeighbour[(int)NeighborDirection::UP] ? 1 : 0;
+	count += m_aHasNeighbour[(int)NeighborDirection::DOWN] ? 1 : 0;
+	return count;
+}
+
+int MPINode::GetNeighboursCount()
+{
+	return GetHorizontalNeighboursCount() + GetVertialNeighboursCount();
+}
+
+void MPINode::GatherOmega(const std::vector<double>& omega, int M, int N, int X_segments, int Y_segments, bool bSave)
+{
+	int world_rank, world_size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank); // Rank of the process
+	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+	int local_w = M + 1;
+	int local_h = N + 1;
+	int local_size = local_w * local_h;
+
+	// --- Gather all sizes to root ---
+	std::vector<int> recv_counts(world_size);
+	MPI_Gather(&local_size, 1, MPI_INT,
+		recv_counts.data(), 1, MPI_INT,
+		0, MPI_COMM_WORLD);
+
+	std::vector<int> displs(world_size);
+	int offset = 0;
+
+	if (world_rank == 0)
+	{
+		for (int i = 0; i < world_size; i++)
+		{
+			displs[i] = offset;
+			offset += recv_counts[i];
+		}
+	}
+
+	std::vector<double> gathered;
+	if (world_rank == 0)
+		gathered.resize(offset);
+
+	// Gather ω from all ranks
+	MPI_Gatherv(omega.data(), local_size, MPI_DOUBLE,
+		gathered.data(), recv_counts.data(),
+		displs.data(), MPI_DOUBLE,
+		0, MPI_COMM_WORLD);
+
+
+	if (world_rank == 0)
+	{
+		// Global grid resolution
+		int global_w = X_segments * (local_w - 1) + 1;
+		int global_h = Y_segments * (local_h - 1) + 1;
+
+		std::vector<double> global_omega(global_w * global_h);
+
+		// Reconstruct full grid
+		for (int rank = 0; rank < world_size; rank++)
+		{
+			int i = rank % X_segments;   // column
+			int j = rank / X_segments;   // row
+
+			int gx0 = i * (local_w - 1);
+			int gy0 = j * (local_h - 1);
+
+			const double* block = &gathered[displs[rank]];
+
+			int w_copy = (i == X_segments - 1) ? local_w : (local_w - 1);
+			int h_copy = (j == Y_segments - 1) ? local_h : (local_h - 1);
+
+			for (int y = 0; y < h_copy; y++)
+			{
+				for (int x = 0; x < w_copy; x++)
+				{
+					int gx = gx0 + x;
+					int gy = gy0 + y;
+
+					global_omega[gy * global_w + gx] = block[y * local_w + x];
+				}
+			}
+		}
+
+		if (bSave)
+		{
+			std::string ResultFileName = "Result" + std::to_string(M * X_segments) + "x" + std::to_string(N * Y_segments) + ".txt";
+			std::ofstream ResultFile(ResultFileName);
+			PrintFlatMatrix(ResultFile, global_omega, N * Y_segments + 1, M * X_segments + 1);
+			ResultFile.close();
+		}
+	}
 }

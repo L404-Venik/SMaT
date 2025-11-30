@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <stdexcept>
 #include <assert.h>
+#include <cstring>
+
 #include "CSRMatrix.h"
 
 int triplet_cmp(const void* a, const void* b)
@@ -118,7 +120,8 @@ CSRMatrix CSRMatrix::COO_To_CSR(const std::unordered_map<std::pair<int, int>, do
 
 CSRMatrix CSRMatrix::Laplace_to_CSR(const std::vector<double>& a, const std::vector<double>& b, int Mn, int Nn)
 {
-	assert(false, "not implemented");
+	throw std::runtime_error("not implemented");
+	//assert(false, "not implemented");
 
 	int N = Mn * Nn;
 	CSRMatrix A(Mn * Nn, Mn * Nn);

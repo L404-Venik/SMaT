@@ -1,6 +1,6 @@
-#include "ConjugateGradient.h"
+#include <cstring>
 
-extern int NumThreads;
+#include "ConjugateGradient.h"
 
 std::vector<double> CustomRealization(const CSRMatrix& A, const std::vector<double>& F)
 {
