@@ -63,12 +63,11 @@ bool domain::FindOptimalPartitionRC(int P, int M, int N, int& R, int& C)
 
 std::vector<Domain> domain::SplitDomain2D(int P, const Domain& InitialDomain)
 {
-    int M = InitialDomain.Nx_local;
-    int N = InitialDomain.Ny_local;
+    int M = InitialDomain.Nx_total - 1; // Segments by X
+    int N = InitialDomain.Ny_total - 1; // Segments by Y
 
     int R = 0, C = 0; // R - доменов по X, C - доменов по Y
     const int OVERLAP_NODES = 2; // Желаемый нахлёст в узлах
-    // Нахлёст в узлах (O) = Нахлёст в сегментах (O_seg) + 1
     const int OVERLAP_SEGMENTS = OVERLAP_NODES - 1; // 1 сегмент
 
     if (!FindOptimalPartitionRC(P, M, N, R, C)) 
@@ -93,13 +92,9 @@ std::vector<Domain> domain::SplitDomain2D(int P, const Domain& InitialDomain)
 
     // The number of segments differs by at most 1 (M_base or M_base + 1)
     for (int i = 0; i < R; ++i) 
-    {
         M_seg_sizes[i] = M_base + (i < M_rem ? 1 : 0); // M_segments
-    }
     for (int j = 0; j < C; ++j) 
-    {
         N_seg_sizes[j] = N_base + (j < N_rem ? 1 : 0); // N_segments
-    }
 
     // Unique segment boundaries (global segment indices [0, M])
     // These are the ideal split points that ensure load balancing.
@@ -109,13 +104,9 @@ std::vector<Domain> domain::SplitDomain2D(int P, const Domain& InitialDomain)
     y_unique_boundaries[0] = 0;
 
     for (int i = 0; i < R; ++i) 
-    {
         x_unique_boundaries[i + 1] = x_unique_boundaries[i] + M_seg_sizes[i];
-    }
     for (int j = 0; j < C; ++j) 
-    {
         y_unique_boundaries[j + 1] = y_unique_boundaries[j] + N_seg_sizes[j];
-    }
 
     // 4. Create Domain structures, applying overlap/halo
     std::vector<Domain> domains;

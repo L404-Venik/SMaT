@@ -48,14 +48,13 @@ inline bool IsEdge(double X, double Y)
 
 inline bool IsOuterCorner(double X, double Y)
 {
-	bool bLeft = IsLeftPart(X, Y);
-	bool bRight = IsRightPart(X, Y);
-	bool bTop = IsTopPart(X, Y);
-	bool bBottom = IsBottomPart(X, Y);
-	return  bLeft && bTop
-		|| IsInnerCorner(X, Y) && (bTop || bRight)
-		|| bRight && bBottom
-		|| bBottom && bLeft;
+	bool result = false;
+	result = result || std::abs(X - X_min) < FLT_EPSILON && std::abs(Y - Y_max) < FLT_EPSILON; // left top
+	result = result || std::abs(X) < FLT_EPSILON && std::abs(Y - Y_max) < FLT_EPSILON; // top center
+	result = result || std::abs(X - X_max) < FLT_EPSILON && std::abs(Y) < FLT_EPSILON; // center right
+	result = result || std::abs(X - X_max) < FLT_EPSILON && std::abs(Y - Y_min) < FLT_EPSILON; // right bottom
+	result = result || std::abs(X - X_min) < FLT_EPSILON && std::abs(Y - Y_min) < FLT_EPSILON; // bottom left
+	return result;
 }
 
 inline bool IsOutOfDomain(double X, double Y)
@@ -63,42 +62,42 @@ inline bool IsOutOfDomain(double X, double Y)
 	return (X > FLT_EPSILON) && (Y > FLT_EPSILON);
 }
 
-
-void CreateWithCOO(CSRMatrix& A, std::vector<double>& F, int m, int n, const Domain& D)
+// Nx - x nodes count, Ny - y nodes count
+void CreateWithCOO(CSRMatrix& A, std::vector<double>& F, int Nx, int Ny, const Domain& D)
 {
 	double X_step, Y_step, a = 0.0, b = 0.0;
-	X_step = (D.x_max - D.x_min) / (double)m;
-	Y_step = (D.y_max - D.y_min) / (double)n;
+	X_step = (D.x_max - D.x_min) / (double)(Nx - 1);
+	Y_step = (D.y_max - D.y_min) / (double)(Ny - 1);
 	double OneBy_h1 = 1.0 / (X_step * X_step); // 1.0/h_1^2 actually
 	double OneBy_h2 = 1.0 / (Y_step * Y_step); // 1.0/h_2^2 actually
 	double EPS = std::max(X_step * X_step, Y_step * Y_step);
 
-	std::vector<double> A_mat(m * n, 0.0), B_mat(m * n, 0.0);
+	std::vector<double> A_mat(Nx * Ny, 0.0), B_mat(Nx * Ny, 0.0);
 	std::vector<Triplet> COO; // coordinate list matrix format
-	COO.reserve(8 * n * m); // expected COO size
+	COO.reserve(8 * Ny * Nx); // expected COO size
 
 	F.clear();
-	F.resize(n * m, 0.0);
+	F.resize(Ny * Nx, 0.0);
 
-	for (int i = 0; i < m; i++) // from Negative X to positive
+	for (int i = 0; i < Nx; i++) // from Negative X to positive
 	{
 		double X_cur = D.x_min + i * X_step;
 
-		for (int j = 0; j < n; j++) // from negative Y to positive
+		for (int j = 0; j < Ny; j++) // from negative Y to positive
 		{
 			double Y_cur = D.y_min + j * Y_step;
 			// default assumption - inside D
 			a = b = 1.0;
-			F[i * n + j] = 1.0;
+			F[i * Ny + j] = 1.0;
 
 			if (IsEdge(X_cur, Y_cur)) // Edge
 			{
-				F[i * n + j] = 0.5;
+				F[i * Ny + j] = 0.5;
 
 				if (IsOuterCorner(X_cur, Y_cur))
 				{
 					a = b = 0.5 * (1.0 / EPS + 1.0);
-					F[i * n + j] = 0.25;
+					F[i * Ny + j] = 0.25;
 				}
 				else if (IsTopPart(X_cur, Y_cur) || IsBottomPart(X_cur, Y_cur) || (std::abs(Y_cur) < EPS && !IsLeftPart(X_cur, Y_cur))) // horizontal parts of edge
 				{
@@ -124,124 +123,50 @@ void CreateWithCOO(CSRMatrix& A, std::vector<double>& F, int m, int n, const Dom
 			else if (IsOutOfDomain(X_cur, Y_cur)) // Outside
 			{
 				a = b = 1.0 / EPS;
-				F[i * n + j] = 0.0;
+				F[i * Ny + j] = 0.0;
 			}
 			else if (IsCenter(X_cur, Y_cur))
 			{
-				F[i * n + j] = 0.75;
+				F[i * Ny + j] = 0.75;
 			}
 
 			if (i > 0)
 			{
-				COO.push_back({ (i - 1) * n + j ,(i - 1) * n + j,  a * OneBy_h1 });
-				COO.push_back({ (i - 1) * n + j ,i * n + j,  -a * OneBy_h1 });
-				COO.push_back({ i * n + j ,(i - 1) * n + j,  -a * OneBy_h1 });
+				COO.push_back({ (i - 1) * Ny + j ,(i - 1) * Ny + j,  a * OneBy_h1 });
+				COO.push_back({ (i - 1) * Ny + j ,i * Ny + j,  -a * OneBy_h1 });
+				COO.push_back({ i * Ny + j ,(i - 1) * Ny + j,  -a * OneBy_h1 });
 			}
 
 			if (j > 0)
 			{
-				COO.push_back({ i * n + j - 1 ,i * n + j - 1,  b * OneBy_h2 });
-				COO.push_back({ i * n + j - 1 ,i * n + j,  -b * OneBy_h2 });
-				COO.push_back({ i * n + j ,i * n + j - 1,  -b * OneBy_h2 });
+				COO.push_back({ i * Ny + j - 1 ,i * Ny + j - 1,  b * OneBy_h2 });
+				COO.push_back({ i * Ny + j - 1 ,i * Ny + j,  -b * OneBy_h2 });
+				COO.push_back({ i * Ny + j ,i * Ny + j - 1,  -b * OneBy_h2 });
 			}
 
-			COO.push_back({ i * n + j ,i * n + j,  a * OneBy_h1 + b * OneBy_h2 });
+			COO.push_back({ i * Ny + j ,i * Ny + j,  a * OneBy_h1 + b * OneBy_h2 });
 
-			A_mat[i * n + j] = a;
-			B_mat[i * n + j] = b;
+			A_mat[i * Ny + j] = a;
+			B_mat[i * Ny + j] = b;
 		}
 	}
 
 	/*std::string AFileName = "Amat.txt";
-	PrintFlatMatrix(AFileName, A_mat, n, m);
+	PrintFlatMatrix(AFileName, A_mat, Ny, Nx);
 	std::string BFileName = "Bmat.txt";
-	PrintFlatMatrix(BFileName, B_mat, n, m);*/
+	PrintFlatMatrix(BFileName, B_mat, Ny, Nx);
+	std::string FFileName = "Fmat.txt";
+	PrintFlatMatrix(FFileName, F, Ny, Nx);*/
 
-	A = CSRMatrix::COO_To_CSR(COO, n * m, n * m);
+	A = CSRMatrix::COO_To_CSR(COO, Ny * Nx, Ny * Nx);
 }
 
-void CreateMatrixesV7(CSRMatrix& A, std::vector<double>& F, int m, int n, const Domain& D) // Variant 7
+void CreateMatrixesV7(CSRMatrix& A, std::vector<double>& F, int Nx, int Ny, const Domain& D) // Variant 7
 {
-	CreateWithCOO(A, F, m, n, D);
+	CreateWithCOO(A, F, Nx, Ny, D);
 }
 
-void CreateFromLaplace(CSRMatrix& A, std::vector<double>& F, int m, int n)
-{
-	int Nn = n + 1, Mn = m + 1; // grid nodes count
-
-	double X_step, Y_step, a = 0.0, b = 0.0;
-	X_step = (X_max - X_min) / (double)m;
-	Y_step = (Y_max - Y_min) / (double)n;
-	double OneBy_h1 = 1.0 / (X_step * X_step); // 1.0/h_1^2 actually
-	double OneBy_h2 = 1.0 / (Y_step * Y_step); // 1.0/h_2^2 actually
-	double EPS = std::max(X_step * X_step, Y_step * Y_step);
-
-	std::vector<double> Amatrix(Nn * Mn, 0.0), Bmatrix(Nn * Mn, 0.0); // matrixes of Laplacian coefficients
-
-	F.clear();
-	F.resize(Nn * Mn, 0.0);
-
-	for (int i = 0; i < Mn; i++) // from Negative X to positive
-	{
-		double X_cur = X_min + i * X_step;
-
-		for (int j = 0; j < Nn; j++) // from negative Y to positive
-		{
-			double Y_cur = Y_min + j * Y_step;
-			// default assumption - inside D
-			a = b = 1.0;
-			F[i * Nn + j] = 1.0;
-
-			if (IsEdge(X_cur, Y_cur)) // Edge
-			{
-				if (IsOuterCorner(X_cur, Y_cur))
-				{
-					a = b = 0.5 * (1.0 / EPS + 1.0);
-				}
-				else if (IsTopPart(X_cur, Y_cur) || IsBottomPart(X_cur, Y_cur) || (std::abs(Y_cur) < EPS && !IsLeftPart(X_cur, Y_cur)))
-				{
-					a = 0.5 * (1.0 / EPS + 1.0);
-					b = 1.0;
-				}
-				else if (IsLeftPart(X_cur, Y_cur) || IsRightPart(X_cur, Y_cur) || (std::abs(X_cur) < EPS && !IsBottomPart(X_cur, Y_cur)))
-				{
-					a = 1.0;
-					b = 0.5 * (1.0 / EPS + 1.0);
-				}
-
-				if (IsLeftPart(X_cur, Y_cur))
-				{
-					a = 1 / EPS;
-				}
-				if (IsBottomPart(X_cur, Y_cur))
-				{
-					b = 1 / EPS;
-				}
-
-				F[i * Nn + j] = 0.5;
-			}
-			else if (IsOutOfDomain(X_cur, Y_cur)) // Outside
-			{
-				a = b = 1.0 / EPS;
-				F[i * Nn + j] = 0.0;
-			}
-			Amatrix[i * Nn + j] = a * OneBy_h1;
-			Bmatrix[i * Nn + j] = b * OneBy_h2;
-		}
-	}
-
-	// Corners
-	F[0] = F[Nn - 1] = F[Mn / 2 * Nn + Nn - 1] = F[(Mn - 1) * Nn] = F[Mn * Nn - Nn / 2 - 1] = 0.25;
-
-	// Center point
-	F[Mn / 2 * Nn + Nn / 2] = 0.75;
-
-	A = CSRMatrix::Laplace_to_CSR(Amatrix, Bmatrix, Mn, Nn);
-}
-
-
-void CreateMatrixesV7(std::vector<CSRMatrix>& A, std::vector<std::vector<double>>& F,
-	int m, int n, const std::vector<Domain>& Domains)
+void CreateMatrixesV7(std::vector<CSRMatrix>& A, std::vector<std::vector<double>>& F, const std::vector<Domain>& Domains)
 {
 	assert(A.size() == F.size() && A.size() == Domains.size());
 
@@ -249,7 +174,7 @@ void CreateMatrixesV7(std::vector<CSRMatrix>& A, std::vector<std::vector<double>
 	
 	for (const auto& D : Domains)
 	{
-		CreateWithCOO(A[i], F[i], m, n, D);
+		CreateWithCOO(A[i], F[i], D.Nx_total, D.Ny_total, D);
 		i++;
 	}
 }

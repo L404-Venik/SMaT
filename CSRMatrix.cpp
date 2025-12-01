@@ -219,26 +219,6 @@ std::vector<double> CSRMatrix::VectorMultiply(const std::vector<double>& x) cons
 	return y;
 }
 
-double* CSRMatrix::VectorMultiply(double* x) const
-{
-	double* y = new double[m_iRows];
-	std::memset(y, 0.0, m_iRows * sizeof(double));
-
-	#pragma omp parallel for schedule(static)
-	for (int i = 0; i < m_iRows; i++)
-	{
-		double sum = 0.0;
-		int start = row_ptr[i];
-		int end = row_ptr[i + 1];
-		for (int k = start; k < end; k++)
-			sum += values[k] * x[col_index[k]];
-
-		y[i] = sum;
-	}
-
-	return y;
-}
-
 std::vector<double> CSRMatrix::GetDiagonal() const
 {
 	std::vector<double> D(m_iRows, 1.0);
@@ -255,92 +235,6 @@ std::vector<double> CSRMatrix::GetDiagonal() const
 	}
 
 	return D;
-}
-
-double* CSRMatrix::GetDiagonalPtr() const
-{
-	double* D = new double[m_iRows];
-
-	for (int i = 0; i < m_iRows; ++i)
-	{
-		for (int k = row_ptr[i]; k < row_ptr[i + 1]; ++k)
-		{
-			if (col_index[k] == i)
-			{
-				D[i] = values[k];
-			}
-		}
-	}
-
-	return D; 
-}
-
-// Serialization
-// Serialize matrix into a contiguous byte buffer
-std::vector<char> CSRMatrix::Serialize() const
-{
-	// Compute total byte size
-	size_t total_bytes =
-		sizeof(int) * 5 +
-		sizeof(double) * values.size() +
-		sizeof(int) * col_index.size() +
-		sizeof(int) * row_ptr.size();
-
-	std::vector<char> buffer(total_bytes);
-	char* ptr = buffer.data();
-
-	auto write_int = [&](int x) {
-		memcpy(ptr, &x, sizeof(int));
-		ptr += sizeof(int);
-		};
-
-	write_int(m_iRows);
-	write_int(m_iCols);
-	write_int((int)values.size());
-	write_int((int)col_index.size());
-	write_int((int)row_ptr.size());
-
-	memcpy(ptr, values.data(), sizeof(double) * values.size());
-	ptr += sizeof(double) * values.size();
-
-	memcpy(ptr, col_index.data(), sizeof(int) * col_index.size());
-	ptr += sizeof(int) * col_index.size();
-
-	memcpy(ptr, row_ptr.data(), sizeof(int) * row_ptr.size());
-
-	return buffer;
-}
-
-// Deserialize a matrix from a byte buffer
-void CSRMatrix::Deserialize(const std::vector<char>& buffer)
-{
-	const char* ptr = buffer.data();
-
-	auto read_int = [&]() {
-		int x;
-		memcpy(&x, ptr, sizeof(int));
-		ptr += sizeof(int);
-		return x;
-		};
-
-	m_iRows = read_int();
-	m_iCols = read_int();
-
-	int vsize = read_int();
-	int csize = read_int();
-	int rsize = read_int();
-
-	values.resize(vsize);
-	col_index.resize(csize);
-	row_ptr.resize(rsize);
-
-	memcpy(values.data(), ptr, sizeof(double) * vsize);
-	ptr += sizeof(double) * vsize;
-
-	memcpy(col_index.data(), ptr, sizeof(int) * csize);
-	ptr += sizeof(int) * csize;
-
-	memcpy(row_ptr.data(), ptr, sizeof(int) * rsize);
 }
 
 // Other funtions
@@ -418,32 +312,22 @@ double DotProduct(const std::vector<double>& x, const std::vector<double>& y)
 	return result;
 }
 
-double DotProduct(const double* x, const double* y, int n)
+// Nx - x nodes count, Ny - y nodes count
+void PrintFlatMatrix(std::ofstream& output, const std::vector<double>& matrix, int Nx, int Ny)
 {
-	double result = 0.0;
-
-	#pragma omp parallel for reduction(+:result) schedule(static)
-	for (int i = 0; i < n; i++)
-		result += x[i] * y[i];
-
-	return result;
-}
-
-void PrintFlatMatrix(std::ofstream& output, const std::vector<double>& matrix, int N, int M)
-{
-	for (int i = 0; i < M; i++)
+	for (int i = 0; i < Nx; i++)
 	{
-		for (int j = 0; j < N; j++)
+		for (int j = 0; j < Ny; j++)
 		{
-			output << matrix[i * N + j] << ' ';
+			output << matrix[i * Ny + j] << ' ';
 		}
 		output << '\n';
 	}
 }
 
-void PrintFlatMatrix(const std::string& sFileName, const std::vector<double>& matrix, int N, int M)
+void PrintFlatMatrix(const std::string& sFileName, const std::vector<double>& matrix, int Nx, int Ny)
 {
 	std::ofstream output(sFileName);
-	PrintFlatMatrix(output, matrix, N, M);
+	PrintFlatMatrix(output, matrix, Nx, Ny);
 	output.close();
 }

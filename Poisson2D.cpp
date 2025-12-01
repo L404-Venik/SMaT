@@ -21,68 +21,6 @@ size_t GetMilisecondsCount()
 	return  duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
-// Rectangle split to N parts
-std::vector<Domain> SplitDomain2D(int P, int& X_segments, int& Y_segments)
-{
-	if (P <= 0)
-		throw std::invalid_argument("P should be positive even number");
-
-	if (P == 1)
-	{
-		X_segments = Y_segments = 1;
-		return std::vector<Domain>{{X_min, X_max, Y_min, Y_max}};
-	}
-
-	if (P % 2 == 1)
-		throw std::invalid_argument("P should be positive even number");
-
-	std::vector<Domain> subdomains;
-	subdomains.reserve(P);
-
-	int best_nx = 1, best_ny = P;
-	double best_ratio = 10.0;
-
-	// optimal n_x, n_y
-	for (int i = 0; i <= std::log2(P); ++i)
-	{
-		int nx = 1 << i;
-		int ny = P / nx;
-		double ratio = static_cast<double>(nx) / ny;
-
-		if (ratio >= 0.5 && ratio <= 2.0)
-		{
-			double deviation = std::fabs(std::log2(ratio));
-			if (deviation < best_ratio)
-			{
-				best_ratio = deviation;
-				best_nx = nx;
-				best_ny = ny;
-			}
-		}
-	}
-
-	X_segments = best_nx;
-	Y_segments = best_ny;
-
-	double dx = (X_max - X_min) / best_nx;
-	double dy = (Y_max - Y_min) / best_ny;
-
-	for (int j = 0; j < best_ny; ++j)
-	{
-		for (int i = 0; i < best_nx; ++i)
-		{
-			Domain s;
-			s.x_min = X_min + i * dx;
-			s.x_max = X_min + (i + 1) * dx;
-			s.y_min = Y_min + j * dy;
-			s.y_max = Y_min + (j + 1) * dy;
-			subdomains.push_back(s);
-		}
-	}
-
-	return subdomains;
-}
-
 void OMPTest()
 {
 	int N, M; // X axis partitioned to M segments, Y - to N
@@ -112,19 +50,21 @@ void OMPTest()
 	avgTime /= Passes;
 
 	std::cout << "average " << avgTime << " ms" << std::endl;
+
+	//std::string ResultFileName = "Result" + std::to_string(M) + "x" + std::to_string(N) + ".txt";
+	//PrintFlatMatrix(ResultFileName, omega, N + 1, M + 1);
 }
 
 void MPITest(int argc, char** argv)
 {
 	int N, M, NumThreads; // X axis partitioned to M segments, Y - to N
-	int X_segments, Y_segments; // Number of segments per axis
 	int world_rank, world_size;
 	MPINode node;
 	// this is matrix, just flatten
 	std::vector<double> local_omega;
 
-	M = 6;
-	N = 8;
+	M = 400;
+	N = 600;
 	NumThreads = 1;
 
 	//std::cin >> M >> N >> NumThreads;
@@ -142,8 +82,8 @@ void MPITest(int argc, char** argv)
 		std::cout << M << "x" << N << " grid" << std::endl;
 	}
 
-	Domain InitialDomain{ X_min, X_max, Y_min, Y_max, M, N, M, N};
-	node.CreateDomainInfo(InitialDomain, M, N);
+	Domain InitialDomain{ X_min, X_max, Y_min, Y_max, M + 1, N + 1, M + 1, N + 1};
+	node.CreateDomainInfo(InitialDomain);
 	CreateMatrixesV7(node.A, node.F, node.m_Subdomain.Nx_total, node.m_Subdomain.Ny_total, node.m_Subdomain);
 	
 	size_t avgTime = 0;
@@ -166,13 +106,11 @@ void MPITest(int argc, char** argv)
 
 	//MPINode::GatherOmega(local_omega, M, N, X_segments, Y_segments, true);
 
-	//std::string ResultFileName = std::to_string(world_rank) + "Result" + std::to_string(Nx_local) + "x" + std::to_string(Ny_local) + ".txt";
-	//PrintFlatMatrix(ResultFileName, local_omega, Ny_local, Nx_local);
+	//std::string ResultFileName = std::to_string(world_rank) + "Result.txt";
+	//PrintFlatMatrix(ResultFileName, local_omega, node.m_Subdomain.Ny_total, node.m_Subdomain.Nx_total);
 
 	MPI_Finalize();
 }
-
-//extern int NumThreads;
 
 int main(int argc, char** argv)
 {

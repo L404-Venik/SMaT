@@ -14,7 +14,9 @@ std::vector<double> CustomRealization(const CSRMatrix& A, const std::vector<doub
 	std::vector<double> p;
 	std::vector<double> Ap(n, 0.0), z(n, 0.0);
 	std::vector<double> D = A.GetDiagonal();
-	std::vector<double> r_norms;
+
+	std::ofstream os("residual.txt", std::ios::out);// clear residual file
+	os.close();
 
 	for (int i = 0; i < n; ++i)
 		z[i] = r[i] / D[i];
@@ -30,7 +32,7 @@ std::vector<double> CustomRealization(const CSRMatrix& A, const std::vector<doub
 
 		double alpha = rz_old / pAp;
 
-		#pragma omp parallel for schedule(static)// num_threads(NumThreads)
+		#pragma omp parallel for schedule(static)
 		for (int i = 0; i < n; i++)
 		{
 			omega[i] += alpha * p[i];
@@ -41,83 +43,17 @@ std::vector<double> CustomRealization(const CSRMatrix& A, const std::vector<doub
 		}
 
 		double rz_new = DotProduct(z, r);
+		double residual = std::sqrt(rz_new);
 
-		if (std::sqrt(rz_new) < delta)
+		std::ofstream os("residual.txt", std::ios::app);
+		os << residual << std::endl;
+		os.close();
+
+		if (residual < delta)
 		{
 			std::cout << "converged in " << it << " stepts\n";
 			break; // converged
 		}
-		//r_norms.push_back(rz_new);
-
-		double beta = rz_new / rz_old;
-
-		#pragma omp parallel for schedule(static)// num_threads(NumThreads)
-		for (int i = 0; i < n; i++)
-		{
-			p[i] = z[i] + beta * p[i];
-		}
-
-		rz_old = rz_new;
-	}
-
-	/*std::ofstream ResultFile("residual.txt");
-	PrintFlatMatrix(ResultFile, r_norms, r_norms.size(),1);
-	ResultFile.close();*/
-
-	return omega;
-}
-
-double* CStyleRealization(const CSRMatrix& A, const double* F)
-{
-	int n = A.m_iRows;
-	int M = std::sqrt(n);
-	const int max_iter = n;
-	const double delta = 0.01;
-
-	double* omega = new double[n];
-	double* r = new double[n];          // r0 = F - A*x = F
-	std::memcpy(r, F, n * sizeof(double));
-	double* p = new double[n];
-	double* Ap = NULL;
-	double* z = new double[n];
-	double* D = A.GetDiagonalPtr();
-	//double* r_norms;
-
-	for (int i = 0; i < n; ++i)
-		z[i] = r[i] / D[i];
-
-	//p = z;
-	std::memcpy(p, z, n * sizeof(double));
-	double rz_old = DotProduct(z, r,n);
-
-	for (int it = 0; it < max_iter; it++)
-	{
-		if (Ap)
-			delete[] Ap;
-		Ap = A.VectorMultiply(p);
-
-		double pAp = DotProduct(p, Ap, n);
-
-		double alpha = rz_old / pAp;
-
-		#pragma omp parallel for schedule(static)
-		for (int i = 0; i < n; i++)
-		{
-			omega[i] += alpha * p[i];
-
-			r[i] -= alpha * Ap[i];
-
-			z[i] = r[i] / D[i];
-		}
-
-		double rz_new = DotProduct(z, r, n);
-
-		if (std::sqrt(rz_new) < delta)
-		{
-			std::cout << "converged in " << it << " stepts\n";
-			break; // converged
-		}
-		//r_norms.push_back(rz_new);
 
 		double beta = rz_new / rz_old;
 
@@ -130,15 +66,6 @@ double* CStyleRealization(const CSRMatrix& A, const double* F)
 		rz_old = rz_new;
 	}
 
-	/*std::ofstream ResultFile("residual.txt");
-	PrintFlatMatrix(ResultFile, r_norms, r_norms.size(),1);
-	ResultFile.close();*/
-
-	delete[] r;
-	delete[] p;
-	delete[] Ap;
-	delete[] z;
-	delete[] D;
 
 	return omega;
 }
@@ -204,14 +131,8 @@ std::vector<double> StdRealization(const CSRMatrix& A, const std::vector<double>
 	return omega;
 }
 
-
 std::vector<double> ConjugateGradient(const CSRMatrix& A, const std::vector<double>& F)
 {
 	return CustomRealization(A, F);
 	//return StdRealization(A, F);
-}
-
-double* ConjugateGradient(const CSRMatrix& A, const double* F)
-{
-	return CStyleRealization(A, F);
 }

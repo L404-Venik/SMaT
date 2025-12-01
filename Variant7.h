@@ -27,8 +27,7 @@ constexpr double Y_max = 1.0;
 constexpr double X_min = -X_max;
 constexpr double Y_min = -Y_max;
 
-// M - x nodes count, N - y nodes count
-void CreateMatrixesV7(CSRMatrix& A, std::vector<double>& F, int M, int N, const Domain& D = { X_min, X_max, Y_min, Y_max });
+// Nx - x nodes count, Ny - y nodes count
+void CreateMatrixesV7(CSRMatrix& A, std::vector<double>& F, int Nx, int Ny, const Domain& D = { X_min, X_max, Y_min, Y_max });
 
-void CreateMatrixesV7(std::vector<CSRMatrix>& A, std::vector<std::vector<double>>& F,
-	int M, int N, const std::vector<Domain>& Domains);
+void CreateMatrixesV7(std::vector<CSRMatrix>& A, std::vector<std::vector<double>>& F, const std::vector<Domain>& Domains);
