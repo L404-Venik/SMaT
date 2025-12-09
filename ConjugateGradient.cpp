@@ -2,12 +2,10 @@
 
 #include "ConjugateGradient.h"
 
-std::vector<double> CustomRealization(const CSRMatrix& A, const std::vector<double>& F)
+std::vector<double> CustomRealization(const CSRMatrix& A, const std::vector<double>& F, double delta)
 {
 	int n = A.m_iRows;
-	int M = std::sqrt(n);
 	const int max_iter = n;
-	const double delta = 0.1;
 
 	std::vector<double> omega(n, 0.0);
 	std::vector<double> r = F;          // r0 = F - A*x = F
@@ -66,16 +64,14 @@ std::vector<double> CustomRealization(const CSRMatrix& A, const std::vector<doub
 		rz_old = rz_new;
 	}
 
-
 	return omega;
 }
 
-std::vector<double> StdRealization(const CSRMatrix& A, const std::vector<double>& F)
+std::vector<double> StdRealization(const CSRMatrix& A, const std::vector<double>& F, double delta)
 {
 	int n = A.m_iRows;
 	int M = std::sqrt(n);
 	const int max_iter = n;
-	const double delta = 0.1;
 
 	std::vector<double> omega(n, 0.0);
 	std::vector<double> r = F;          // r0 = F - A*x = F
@@ -131,8 +127,8 @@ std::vector<double> StdRealization(const CSRMatrix& A, const std::vector<double>
 	return omega;
 }
 
-std::vector<double> ConjugateGradient(const CSRMatrix& A, const std::vector<double>& F)
+std::vector<double> ConjugateGradient(const CSRMatrix& A, const std::vector<double>& F, double delta)
 {
-	return CustomRealization(A, F);
+	return CustomRealization(A, F, delta);
 	//return StdRealization(A, F);
 }

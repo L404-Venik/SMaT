@@ -21,23 +21,22 @@ size_t GetMilisecondsCount()
 	return  duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
 }
 
-void OMPTest()
+struct TestParameters
 {
-	int N, M; // X axis partitioned to M segments, Y - to N
-	int NumThreads;
+	int M, N, NumThreads, Passes;
+};
 
-	std::cin >> M >> N >> NumThreads;
-	std::cout << "OpenMP test with " << M << "x" << N << " grid and " << NumThreads << " threads" << std::endl;
-
-	omp_set_num_threads(NumThreads);
+void OMPTest(int argc, char** argv, const TestParameters& Param)
+{
+	std::cout << "OpenMP test with " << omp_get_max_threads() << " threads" << std::endl;
+	std::cout << Param.M << "x" << Param.N << " grid" << std::endl;
 
 	CSRMatrix A;
 	std::vector<double> F, omega; // these are matrixes, just flatten
-	CreateMatrixesV7(A, F, M + 1, N + 1);
+	CreateMatrixesV7(A, F, Param.M + 1, Param.N + 1);
 
 	size_t avgTime = 0;
-	int Passes = 3;
-	for (int i = 0; i < Passes; i++)
+	for (int i = 0; i < Param.Passes; i++)
 	{
 		size_t start = GetMilisecondsCount();
 		omega = ConjugateGradient(A, F);
@@ -47,28 +46,18 @@ void OMPTest()
 
 		avgTime += end - start;
 	}
-	avgTime /= Passes;
+	avgTime /= Param.Passes;
 
 	std::cout << "average " << avgTime << " ms" << std::endl;
 
-	//std::string ResultFileName = "Result" + std::to_string(M) + "x" + std::to_string(N) + ".txt";
-	//PrintFlatMatrix(ResultFileName, omega, N + 1, M + 1);
+	//std::string ResultFileName = "Result.txt";
+	//PrintFlatMatrix(ResultFileName, omega, Param.M + 1, Param.N + 1);
 }
 
-void MPITest(int argc, char** argv)
+void MPITest(int argc, char** argv, const TestParameters& Param)
 {
-	int N, M, NumThreads; // X axis partitioned to M segments, Y - to N
 	int world_rank, world_size;
 	MPINode node;
-	// this is matrix, just flatten
-	std::vector<double> local_omega;
-
-	M = 400;
-	N = 600;
-	NumThreads = 1;
-
-	//std::cin >> M >> N >> NumThreads;
-	omp_set_num_threads(NumThreads);
 
 	MPI_Init(&argc, &argv);
 
@@ -78,42 +67,69 @@ void MPITest(int argc, char** argv)
 	if (world_rank == 0)
 	{
 		std::cout << "MPI test" << std::endl;
-		std::cout << world_size << " nodes with " << NumThreads << " threads in each" << std::endl;
-		std::cout << M << "x" << N << " grid" << std::endl;
+		std::cout << world_size << " nodes with " << omp_get_max_threads() << " threads in each" << std::endl;
+		std::cout << Param.M << "x" << Param.N << " grid" << std::endl;
 	}
 
-	Domain InitialDomain{ X_min, X_max, Y_min, Y_max, M + 1, N + 1, M + 1, N + 1};
-	node.CreateDomainInfo(InitialDomain);
+	Domain InitialDomain{ X_min, X_max, Y_min, Y_max, Param.M + 1, Param.N + 1, Param.M + 1, Param.N + 1 };
+	if (!node.CreateDomainInfo(InitialDomain))
+	{
+		std::cout << "Couldn't create node domain info. Finishing programm" << std::endl;
+		MPI_Finalize();
+		return;
+	}
 	CreateMatrixesV7(node.A, node.F, node.m_Subdomain.Nx_total, node.m_Subdomain.Ny_total, node.m_Subdomain);
-	
+
 	size_t avgTime = 0;
-	int Passes = 1;
-	for (int i = 0; i < Passes; i++)
+	for (int i = 0; i < Param.Passes; i++)
 	{
 		size_t start = GetMilisecondsCount();
-		local_omega = node.ConjugateGradient();
+		int iter = node.ConjugateGradient();
 		size_t end = GetMilisecondsCount();
 
 		if (world_rank == 0)
+		{
+			if (i == 0 && iter > 0)
+				std::cout << "Converged in " << iter << " iterations" << std::endl;
+
 			std::cout << i << " run - " << end - start << " ms" << std::endl;
+		}
 
 		avgTime += end - start;
 	}
-	avgTime /= Passes;
+	avgTime /= Param.Passes;
 
 	if (world_rank == 0)
 		std::cout << "average " << avgTime << " ms" << std::endl;
 
-	//MPINode::GatherOmega(local_omega, M, N, X_segments, Y_segments, true);
-
-	//std::string ResultFileName = std::to_string(world_rank) + "Result.txt";
-	//PrintFlatMatrix(ResultFileName, local_omega, node.m_Subdomain.Ny_total, node.m_Subdomain.Nx_total);
+	//MPINode::GatherOmega(local_omega, Param.M, Param.N, X_segments, Y_segments, true);
 
 	MPI_Finalize();
 }
 
 int main(int argc, char** argv)
 {
-	//OMPTest();
-	MPITest(argc, argv);
+	TestParameters Param;
+
+	// for local testing
+	std::cin >> Param.M >> Param.N >> Param.NumThreads;
+
+
+	// for testing on Polus
+	/*if (argc < 3) 
+	{
+		std::cerr << "Usage: program <int1> <int2> <int3>\n";
+		return -1;
+	}
+	Param.M = std::stoi(argv[1]);
+	Param.N = std::stoi(argv[2]);
+	Param.NumThreads = std::atoi(argv[3]);*/
+
+	Param.Passes = 5;
+	omp_set_num_threads(Param.NumThreads);
+
+	OMPTest(argc, argv, Param);
+	//MPITest(argc, argv, Param);
+
+	return 0;
 }

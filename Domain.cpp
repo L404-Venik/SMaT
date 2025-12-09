@@ -66,13 +66,13 @@ std::vector<Domain> domain::SplitDomain2D(int P, const Domain& InitialDomain)
     int M = InitialDomain.Nx_total - 1; // Segments by X
     int N = InitialDomain.Ny_total - 1; // Segments by Y
 
-    int R = 0, C = 0; // R - доменов по X, C - доменов по Y
-    const int OVERLAP_NODES = 2; // Желаемый нахлёст в узлах
-    const int OVERLAP_SEGMENTS = OVERLAP_NODES - 1; // 1 сегмент
+    int R = 0, C = 0; // R - segments by X axis, C - segments by Y axis
+    const int OVERLAP_NODES = 2;
+    const int OVERLAP_SEGMENTS = OVERLAP_NODES - 1;
 
     if (!FindOptimalPartitionRC(P, M, N, R, C)) 
     {
-        std::cerr << "error finding partition" << std::endl;
+        std::cerr << "No valid partition found" << std::endl;
         return {};
     }
 

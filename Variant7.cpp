@@ -165,16 +165,3 @@ void CreateMatrixesV7(CSRMatrix& A, std::vector<double>& F, int Nx, int Ny, cons
 {
 	CreateWithCOO(A, F, Nx, Ny, D);
 }
-
-void CreateMatrixesV7(std::vector<CSRMatrix>& A, std::vector<std::vector<double>>& F, const std::vector<Domain>& Domains)
-{
-	assert(A.size() == F.size() && A.size() == Domains.size());
-
-	int i = 0;
-	
-	for (const auto& D : Domains)
-	{
-		CreateWithCOO(A[i], F[i], D.Nx_total, D.Ny_total, D);
-		i++;
-	}
-}

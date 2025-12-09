@@ -28,6 +28,7 @@ class MPINode
 
 	std::vector<NeighborInfo> m_vNeighbors;
 	std::array<bool,4> m_aHasNeighbour;
+	std::vector<double> local_omega;
 
 	int m_iMaxIter;
 public:
@@ -36,8 +37,8 @@ public:
 	std::vector<double> F;
 	Domain m_Subdomain;
 
-	void CreateDomainInfo(const Domain& InitialDomain);
+	bool CreateDomainInfo(const Domain& InitialDomain);
 
-	std::vector<double> ConjugateGradient();
-	static void GatherOmega(const std::vector<double>& omega, int M, int N, int X_segments, int Y_segments, bool bSave = false);
+	int ConjugateGradient(double delta = 0.05);
+	void GatherOmega(int X_segments, int Y_segments, bool bSave = false);
 };

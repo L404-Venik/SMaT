@@ -12,7 +12,7 @@ struct Domain
 namespace domain
 {
 	/**
-	 * @brief Checks the possibility of a (M x N nodes) region structured partition
+	 * @brief Checks the possibility of a (M x N nodes) domain structured partition
 	 * into P subdomains R x C satisfying the sides ratio constraint.
 	 *
 	 * @param P Total number of subdomains.
@@ -24,9 +24,8 @@ namespace domain
 	 */
 	bool FindOptimalPartitionRC(int P, int M, int N, int& R, int& C);
 
-
 	/**
-	 * @brief Разбивает исходную область на P подобластей с нахлёстом в 2 узла.
+	 * @brief Splits the source domain into P subdomains with 2 nodes overlap.
 	 *
 	 * @param P Total number of subdomains.
 	 * @param InitialDomain Information about domain to make partition of

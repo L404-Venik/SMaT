@@ -81,121 +81,6 @@ CSRMatrix CSRMatrix::COO_To_CSR(const std::vector<Triplet>& coo, int rows, int c
 	return A;
 }
 
-CSRMatrix CSRMatrix::COO_To_CSR(const std::unordered_map<std::pair<int, int>, double, PairHash>& entries, int rows, int cols)
-{
-	CSRMatrix A(rows, cols);
-	A.row_ptr.assign(rows + 1, 0);
-
-	// First pass: count nonzeros per row
-	for (auto& kv : entries) 
-	{
-		int i = kv.first.first;
-		A.row_ptr[i + 1]++;
-	}
-
-	// Prefix sum to get row_ptr
-	for (int i = 0; i < rows; i++) 
-		A.row_ptr[i + 1] += A.row_ptr[i];
-
-	// Allocate memory
-	int nnz = (int)entries.size();
-	A.values.resize(nnz);
-	A.col_index.resize(nnz);
-
-	// Second pass: fill data
-	std::vector<int> offset = A.row_ptr;
-	for (auto& kv : entries) 
-	{
-		int i = kv.first.first;
-		int j = kv.first.second;
-		double v = kv.second;
-
-		int idx = offset[i]++;
-		A.col_index[idx] = j;
-		A.values[idx] = v;
-	}
-
-	return A;
-}
-
-CSRMatrix CSRMatrix::Laplace_to_CSR(const std::vector<double>& a, const std::vector<double>& b, int Mn, int Nn)
-{
-	throw std::runtime_error("not implemented");
-	//assert(false, "not implemented");
-
-	int N = Mn * Nn;
-	CSRMatrix A(Mn * Nn, Mn * Nn);
-
-	int nnz = 0;
-
-	for (int i = 0; i < Mn; ++i)
-	{
-		for (int j = 0; j < Nn; ++j)
-		{
-			int row = i * Nn + j;
-			A.row_ptr[row] = nnz;
-
-			double diag = 0.0;
-
-			int sz = A.col_index.size();
-
-			// --- Left neighbor ---
-			if (j > 0)
-			{
-				double bv = b[row]; // same as in your COO code
-				A.col_index.push_back(row - 1);
-				A.values.push_back(-bv);
-				diag += bv;
-				nnz++;
-			}
-
-			// --- Up neighbor ---
-			if (i > 0)
-			{
-				double av = a[row];
-				A.col_index.push_back(row - Nn);
-				A.values.push_back(-av);
-				diag += av;
-				nnz++;
-			}
-
-			// --- Diagonal ---
-			// sum of all attached coefficients
-			double self_a = ((i > 0 ? a[row] : 0.0) + (i < Mn - 1 ? a[row + Nn] : 0.0));
-			double self_b = ((j > 0 ? b[row] : 0.0) + (j < Nn - 1 ? b[row + 1] : 0.0));
-			diag += self_a + self_b;
-
-			A.col_index.push_back(row);
-			A.values.push_back(diag);
-			nnz++;
-
-			// --- Right neighbor ---
-			if (j < Nn - 1)
-			{
-				double bv = b[row + 1];
-				A.col_index.push_back(row + 1);
-				A.values.push_back(-bv);
-				nnz++;
-			}
-
-			// --- Down neighbor ---
-			if (i < Mn - 1)
-			{
-				double av = a[row + Nn];
-				A.col_index.push_back(row + Nn);
-				A.values.push_back(-av);
-				nnz++;
-			}
-		}
-	}
-
-	A.row_ptr[N] = nnz;
-
-	return A;
-}
-
-
-int NumThreads;
 // Sparse matrix-vector multiply: y = A * x
 std::vector<double> CSRMatrix::VectorMultiply(const std::vector<double>& x) const
 {
@@ -321,13 +206,13 @@ void PrintFlatMatrix(std::ofstream& output, const std::vector<double>& matrix, i
 		{
 			output << matrix[i * Ny + j] << ' ';
 		}
-		output << '\n';
+		output << std::endl;
 	}
 }
 
-void PrintFlatMatrix(const std::string& sFileName, const std::vector<double>& matrix, int Nx, int Ny)
+void PrintFlatMatrix(const std::string& sFilePath, const std::vector<double>& matrix, int Nx, int Ny)
 {
-	std::ofstream output(sFileName);
+	std::ofstream output(sFilePath);
 	PrintFlatMatrix(output, matrix, Nx, Ny);
 	output.close();
 }

@@ -35,9 +35,7 @@ public:
 
 	// Convert COO → CSR
 	static CSRMatrix COO_To_CSR(const std::vector<Triplet>& coo, int rows, int cols);
-	static CSRMatrix COO_To_CSR(const std::unordered_map<std::pair<int, int>, double, PairHash>& entries, int rows, int cols);
-	static CSRMatrix Laplace_to_CSR(const std::vector<double>& a, const std::vector<double>& b, int Mn, int Nn);
-
+	
 	// Sparse matrix-vector multiply: y = A * x
 	std::vector<double> VectorMultiply(const std::vector<double>& x) const;
 	std::vector<double> GetDiagonal() const;
@@ -47,6 +45,18 @@ public:
 };
 
 
+/**
+* @brief Computes dot product of 2 vectors of the same size
+* @return Dot product value.
+*/
 double DotProduct(const std::vector<double>& x, const std::vector<double>& y);
-void PrintFlatMatrix(std::ofstream& output, const std::vector<double>& matrix, int N, int M);
-void PrintFlatMatrix(const std::string& sFileName, const std::vector<double>& matrix, int N, int M);
+
+/**
+* @brief Prints flattened matrix to a file
+*
+* @param sFilePath - Path to a file to print matrix into.
+* @param matrix - Flattened matrix.
+* @param Nx - Rows number.
+* @param Ny - Columns number.
+*/
+void PrintFlatMatrix(const std::string& sFilePath, const std::vector<double>& matrix, int Nx, int Ny);

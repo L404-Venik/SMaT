@@ -84,25 +84,24 @@ double MPINode::DotProduct(const std::vector<double>& x, const std::vector<doubl
 }
 
 
-std::vector<double> MPINode::ConjugateGradient()
+int MPINode::ConjugateGradient(double delta)
 {
 	int world_rank, world_size;
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
 	int n = A.m_iRows;
-	const double delta = 0.05;
 
-	std::vector<double> omega(n, 0.0);
+	local_omega = std::vector<double>(n, 0.0);
 	std::vector<double> r = F;          // r0 = F - A*x = F
 	std::vector<double> p;
 	std::vector<double> Ap(n, 0.0), z(n, 0.0);
 	std::vector<double> D = A.GetDiagonal();
 
-	int i_start = m_aHasNeighbour[(int)Direction::LEFT] ? 1 : 0;
+	/*int i_start = m_aHasNeighbour[(int)Direction::LEFT] ? 1 : 0;
 	int j_start = m_aHasNeighbour[(int)Direction::UP] ? 1 : 0;
 	int i_end = i_start + m_Subdomain.Nx_local;
-	int j_end = j_start + m_Subdomain.Ny_local;
+	int j_end = j_start + m_Subdomain.Ny_local;*/
 
 	for (int i = 0; i < n; ++i)
 		z[i] = r[i] / D[i];
@@ -135,7 +134,7 @@ std::vector<double> MPINode::ConjugateGradient()
 		#pragma omp parallel for schedule(static)
 		for (int i = 0; i < n; i++)
 		{
-			omega[i] += alpha * p[i];
+			local_omega[i] += alpha * p[i];
 
 			r[i] -= alpha * Ap[i];
 
@@ -156,17 +155,17 @@ std::vector<double> MPINode::ConjugateGradient()
 
 		if (global_residual < delta)
 		{
-			if (world_rank == 0)
-				std::cout << "converged in " << it << " stepts\n";
+			//if (world_rank == 0)
+			//	std::cout << "converged in " << it << " stepts\n";
 
-			return omega; // converged
+			return it; // converged
 		}
 		else if (global_residual > 1e9)
 		{
 			if (world_rank == 0)
 				std::cout << "diverged. " << it << " stepts done\n";
 
-			return omega; // diverged
+			return it; // diverged
 		}
 
 		double beta = rz_new / rz_old;
@@ -181,10 +180,10 @@ std::vector<double> MPINode::ConjugateGradient()
 	if (world_rank == 0)
 		std::cout << "steps limit (" << m_iMaxIter << ") reached" << std::endl;
 
-	return omega;
+	return -1;
 }
 
-void  MPINode::CreateDomainInfo(const Domain& InitialDomain)
+bool  MPINode::CreateDomainInfo(const Domain& InitialDomain)
 {
 	int world_rank, world_size;
 	int X_segments, Y_segments;
@@ -200,8 +199,7 @@ void  MPINode::CreateDomainInfo(const Domain& InitialDomain)
 	if (Domains.size() != world_size)
 	{
 		assert(false);
-		MPI_Finalize();
-		return;
+		return false;
 	}
 
 	m_Subdomain = Domains[world_rank];
@@ -210,6 +208,8 @@ void  MPINode::CreateDomainInfo(const Domain& InitialDomain)
 	domain::FindOptimalPartitionRC(world_size, M, N, X_segments, Y_segments);
 
 	BuildNeighborInfo(world_rank, X_segments, Y_segments);
+
+	return true;
 }
 
 void MPINode::BuildNeighborInfo(int world_rank, int X_segments, int Y_segments)
@@ -334,7 +334,7 @@ int MPINode::GetNeighboursCount()
 	return GetHorizontalNeighboursCount() + GetVertialNeighboursCount();
 }
 
-void MPINode::GatherOmega(const std::vector<double>& omega, int M, int N, int X_segments, int Y_segments, bool bSave)
+void MPINode::GatherOmega(int X_segments, int Y_segments, bool bSave)
 {
 	throw std::runtime_error("not implemented");
 
@@ -342,8 +342,8 @@ void MPINode::GatherOmega(const std::vector<double>& omega, int M, int N, int X_
 	MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 	MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-	int local_w = M + 1;
-	int local_h = N + 1;
+	int local_w = m_Subdomain.Nx_total;
+	int local_h = m_Subdomain.Ny_total;
 	int local_size = local_w * local_h;
 
 	std::vector<int> recv_counts(world_size);
@@ -368,7 +368,7 @@ void MPINode::GatherOmega(const std::vector<double>& omega, int M, int N, int X_
 		gathered.resize(offset);
 
 	// Gather ω from all ranks
-	MPI_Gatherv(omega.data(), local_size, MPI_DOUBLE,
+	MPI_Gatherv(local_omega.data(), local_size, MPI_DOUBLE,
 		gathered.data(), recv_counts.data(),
 		displs.data(), MPI_DOUBLE,
 		0, MPI_COMM_WORLD);
@@ -411,9 +411,7 @@ void MPINode::GatherOmega(const std::vector<double>& omega, int M, int N, int X_
 		if (bSave)
 		{
 			std::string ResultFileName = "Result.txt";
-			std::ofstream ResultFile(ResultFileName);
-			PrintFlatMatrix(ResultFile, global_omega, N * Y_segments + 1, M * X_segments + 1);
-			ResultFile.close();
+			//PrintFlatMatrix(ResultFileName, global_omega, N * Y_segments + 1, M * X_segments + 1);
 		}
 	}
 }
